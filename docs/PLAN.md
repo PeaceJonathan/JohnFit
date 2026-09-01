@@ -15,6 +15,11 @@ The repo (`peacejonathan/johnfit`) is currently completely empty — no commits,
 - **All three sports (running, cycling, swimming)** are in scope for v1, with swimming explicitly using a different, pace-based, non-real-time coaching model, since BLE heart-rate straps cannot transmit live underwater.
 - **Audio is a primary coaching channel, not a fallback** — most users don't look at their phone mid-workout, so out-of-zone alerts should be spoken cues that duck (briefly lower) whatever music/podcast is already playing, then fade it back up, rather than a screen alert people are expected to glance at.
 
+**Revised after M1 (no Mac available — building via CI + free sideloading):** the developer doesn't own a Mac, so the app is built on GitHub Actions (a macOS CI runner) and sideloaded onto the iPhone via AltStore/AltServer using a **free** Apple ID, rather than opened directly in Xcode. A free Apple ID cannot provision several capabilities, including **HealthKit** — so until this project is on a paid Apple Developer account ($99/year), HealthKit is dropped from the plan and **SwiftData is the source of truth for workouts/HR data instead of HealthKit**. This does not affect Bluetooth heart-rate connectivity (CoreBluetooth's central role needs no special entitlement) or the CI/build approach otherwise. Concretely, this changes §3 and §7 below from the original design:
+- No `HealthKit/` module, no `HKWorkout`/`HKQuantitySample` writes, no Watch-as-HR-source (Watch HR was only reachable via HealthKit).
+- `WorkoutRecord` (SwiftData) stores the HR time series directly (as encoded JSON) instead of deferring to HealthKit samples.
+- When a paid account is added later: introduce the `HealthKit/` module as originally designed, switch `WorkoutRecord` to reference an `HKWorkout` instead of embedding samples, and one-time-import existing local records into HealthKit if desired. This is a contained migration because every consumer already depends on the `HRSource` protocol and `WorkoutRecord`'s public shape, not on HealthKit directly.
+
 ---
 
 ## 1. Zone model & why
@@ -108,14 +113,16 @@ JohnFitUITests/  // XCUITest, driven via SimulatedHRStreamProvider
 
 ## 3. Data model
 
-**HealthKit (source of truth):** `HKWorkout` (running/cycling/swimming, duration, distance, energy), `HKQuantitySample` `.heartRate` written via `HKLiveWorkoutBuilder.addSamples(_:)`, swim lap/stroke data read from auto-detected swim workouts.
+**Originally planned — HealthKit as source of truth** (still the target once a paid Developer account exists): `HKWorkout` (running/cycling/swimming, duration, distance, energy), `HKQuantitySample` `.heartRate` written via `HKLiveWorkoutBuilder.addSamples(_:)`, swim lap/stroke data read from auto-detected swim workouts.
 
-**Local persistence — SwiftData** (chosen over Core Data for a fresh iOS 17+ app), UUID-keyed throughout so it's CloudKit-sync-ready later:
+**As currently implemented — HealthKit-free (see the no-Mac/free-sideload note under Context):** everything lives in SwiftData, including the HR time series itself (as encoded JSON on `WorkoutRecord`), since there's no `HKWorkout`/`HKQuantitySample` to defer to. UUID-keyed throughout so it's CloudKit-sync-ready later:
 
-- `BaselineTestResult` — id, sport, date, protocolVersion, computedThresholdHR / computedThresholdPaceSecPer100, talkTestCrossoverStageIndex (running), mafReferenceEstimate (running), healthKitWorkoutUUID.
-- `ZoneProfile` — id, sport, sourceTestResultID, createdAt, zoneBoundaries[]. "Active" profile per sport = most-recent `createdAt`, not a unique-constraint flag (avoids write conflicts once CloudKit sync exists).
-- `WorkoutRecord` — id, healthKitWorkoutUUID, sport, targetZone, timeInZoneSeconds[Int: TimeInterval], zoneProfileIDUsed, isSwimPostSynced.
-- `UserSettings` — units, retestReminderEnabled/cadenceWeeks (default 5), lastTestDatePerSport, defaultTargetZonePerSport (default 2), haptic/audio toggles, simulatedHRModeEnabled.
+- `WorkoutRecord` *(implemented in M2)* — id, sport, startedAt, duration, averageBPM/minBPM/maxBPM, encoded `[HRSamplePoint]` (seconds-since-start + bpm). No `healthKitWorkoutUUID`/`targetZone`/`timeInZoneSeconds` yet — those land with M3/M4 once `ZoneProfile` exists.
+- `BaselineTestResult` *(M3)* — id, sport, date, protocolVersion, computedThresholdHR / computedThresholdPaceSecPer100, talkTestCrossoverStageIndex (running), mafReferenceEstimate (running).
+- `ZoneProfile` *(M3)* — id, sport, sourceTestResultID, createdAt, zoneBoundaries[]. "Active" profile per sport = most-recent `createdAt`, not a unique-constraint flag (avoids write conflicts once CloudKit sync exists).
+- `UserSettings` *(M3/M4)* — units, retestReminderEnabled/cadenceWeeks (default 5), lastTestDatePerSport, defaultTargetZonePerSport (default 2), haptic/audio toggles, simulatedHRModeEnabled.
+
+When HealthKit is added later, `WorkoutRecord` gains a `healthKitWorkoutUUID` and can drop the embedded sample blob in favor of reading HK samples on demand — additive, not a rewrite.
 
 ---
 
@@ -164,8 +171,8 @@ Since most users train with music/podcasts playing and won't be looking at the s
 
 ## 7. Milestones
 
-1. **M1** — BLE HR connectivity + live HR display, **and** `SimulatedHRStreamProvider` (build now, not later, so every following milestone is Simulator-testable).
-2. **M2** — HealthKit foundation (auth, `WorkoutSessionEngine` skeleton, `HealthKitLiveHRProvider` with latency caveat) + SwiftData `PersistenceController` and core models.
+1. **M1** (done) — BLE HR connectivity + live HR display, **and** `SimulatedHRStreamProvider` (build now, not later, so every following milestone is Simulator-testable).
+2. **M2** (done, revised) — ~~HealthKit foundation~~ **local persistence instead**, per the no-Mac/free-sideload note above: SwiftData `PersistenceController`, a `WorkoutRecord` model storing HR samples directly, an `HRSourceCoordinator` (single consumer of the active `HRSource`, republishing readings so multiple screens can observe live HR without racing over the same `AsyncStream`), a basic `WorkoutRecordingEngine`, and `LiveWorkoutView`/`WorkoutHistoryListView` screens. `HealthKitManager`/`WorkoutSessionEngine`/`HealthKitLiveHRProvider` are deferred to whenever a paid Developer account exists.
 3. **M3** — Zone model + running baseline test → stored `ZoneProfile`.
 4. **M4** — Live run coaching (`LiveCoachingEngine`, `AlertManager`, `AudioCoachSession` music-ducking cues, `LiveWorkoutView`, `WorkoutWriter`) — first true end-to-end vertical slice.
 5. **M5** — Cycling baseline test + coaching reuse (should need near-zero new coaching code if M4 is built sport-generic).
