@@ -37,9 +37,3 @@ final class WorkoutRecordTests: XCTestCase {
         XCTAssertEqual(decoded[1].secondsSinceStart, 5.5, accuracy: 0.001)
     }
 }
-
-extension HRSamplePoint: Equatable {
-    static func == (lhs: HRSamplePoint, rhs: HRSamplePoint) -> Bool {
-        lhs.secondsSinceStart == rhs.secondsSinceStart && lhs.beatsPerMinute == rhs.beatsPerMinute
-    }
-}

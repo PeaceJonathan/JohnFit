@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// One recorded heart-rate sample, timestamped relative to workout start.
-struct HRSamplePoint: Codable {
+struct HRSamplePoint: Codable, Equatable {
     let secondsSinceStart: TimeInterval
     let beatsPerMinute: Int
 }
