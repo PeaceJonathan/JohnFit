@@ -1,0 +1,51 @@
+name: JohnFit
+options:
+  bundleIdPrefix: com.johnfit
+  deploymentTarget:
+    iOS: "17.0"
+configs:
+  Debug: debug
+  Release: release
+targets:
+  JohnFit:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: JohnFit
+    info:
+      path: Generated/JohnFit-Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSBluetoothAlwaysUsageDescription: "JohnFit connects to your Bluetooth heart rate monitor so it can coach you in your target cardio zone during workouts."
+        UIBackgroundModes:
+          - bluetooth-central
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.johnfit.app
+        PRODUCT_NAME: JohnFit
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+  JohnFitTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: JohnFitTests
+    dependencies:
+      - target: JohnFit
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+schemes:
+  JohnFit:
+    build:
+      targets:
+        JohnFit: all
+        JohnFitTests: [test]
+    test:
+      targets:
+        - JohnFitTests
+    run:
+      config: Debug
